@@ -1,3 +1,4 @@
+
 # Raylib Game Project
 
 A clean C++ game development starter project using a self-contained prebuilt **Raylib** binary.
@@ -41,7 +42,3 @@ OOPs cp/
    ```powershell
    .\build\RaylibGame.exe
    ```
-
-### Option 2: VS Code / Antigravity IDE
-- **Build**: Press `Ctrl + Shift + B` (runs `CMake: Build`).
-- **Run**: Press `Ctrl + Shift + P` -> `Tasks: Run Task` -> `Run Game`.
