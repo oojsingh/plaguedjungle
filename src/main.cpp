@@ -1,7 +1,7 @@
 #include "raylib.h"
 #include "ResourceManager.h"
 #include "GameStateManager.h"
-#include "PlayState.h"
+#include "MenuState.h"
 #include <algorithm>
 
 int main() {
@@ -16,9 +16,9 @@ int main() {
     // Initialize asset system & generate pixel-art textures if not already generated
     ResourceManager::GetInstance().InitializeDefaultAssets();
 
-    // Create and initialize Game State Manager with PlayState
+    // Create and initialize Game State Manager with the menu
     GameStateManager stateManager;
-    stateManager.ChangeState(std::make_unique<PlayState>());
+    stateManager.ChangeState(std::make_unique<MenuState>());
 
     // Main game loop
     while (!WindowShouldClose() && stateManager.IsRunning()) {

@@ -1,5 +1,6 @@
 #include "Platform.h"
 #include "ResourceManager.h"
+#include <algorithm>
 
 Platform::Platform(Vector2 position, Vector2 size, PlatformType type)
     : Entity(position, size, EntityType::PLATFORM),
@@ -8,7 +9,10 @@ Platform::Platform(Vector2 position, Vector2 size, PlatformType type)
       m_endPos(position),
       m_speed(0.0f),
       m_movingToEnd(true),
-      m_platformVelocity({ 0.0f, 0.0f }) {}
+      m_platformVelocity({ 0.0f, 0.0f }),
+      m_revealOnApproach(false),
+      m_revealed(false),
+      m_visibilityTimer(0.0f) {}
 
 Platform::Platform(Vector2 startPos, Vector2 endPos, Vector2 size, float speed)
     : Entity(startPos, size, EntityType::PLATFORM),
@@ -17,9 +21,30 @@ Platform::Platform(Vector2 startPos, Vector2 endPos, Vector2 size, float speed)
       m_endPos(endPos),
       m_speed(speed),
       m_movingToEnd(true),
-      m_platformVelocity({ 0.0f, 0.0f }) {}
+      m_platformVelocity({ 0.0f, 0.0f }),
+      m_revealOnApproach(false),
+      m_revealed(false),
+      m_visibilityTimer(0.0f) {}
+
+void Platform::SetRevealOnApproach() {
+    m_revealOnApproach = true;
+    m_active = false;
+}
+
+void Platform::RevealFor(float seconds) {
+    if (!CanBeRevealed()) return;
+    m_revealed = true;
+    m_visibilityTimer = seconds;
+    Activate();
+}
 
 void Platform::Update(float dt) {
+    if (m_revealed && m_visibilityTimer > 0.0f) {
+        m_visibilityTimer -= dt;
+        if (m_visibilityTimer <= 0.0f) {
+            Destroy();
+        }
+    }
     if (m_platformType != PlatformType::MOVING) return;
 
     Vector2 target = m_movingToEnd ? m_endPos : m_startPos;
@@ -73,11 +98,25 @@ void Platform::Draw() {
             DrawRectangle(static_cast<int>(bounds.x + bounds.width - 10), static_cast<int>(y + 15), 8, 12, Color{ 46, 125, 50, 220 });
         }
     } else {
-        // Standard Solid Ancient Canopy Branch
-        DrawRectangleRec(bounds, Color{ 60, 42, 28, 255 });
-        DrawRectangleLinesEx(bounds, 2.0f, Color{ 42, 28, 18, 255 });
-        // Lush canopy moss on the landing surface
-        DrawLineEx({ bounds.x, bounds.y }, { bounds.x + bounds.width, bounds.y }, 3.5f, Color{ 46, 204, 113, 255 });
+        Texture2D& moss = ResourceManager::GetInstance().GetTexture("moss_platform");
+        DrawRectangleRec(bounds, Color{ 76, 48, 29, 255 });
+        if (moss.id != 0) {
+            Rectangle source = { 0.0f, 0.0f, static_cast<float>(moss.width), static_cast<float>(moss.height) };
+            const float tileWidth = std::min(180.0f, bounds.width);
+            const float tileHeight = std::min(48.0f, std::max(28.0f, bounds.height));
+            for (float x = bounds.x; x < bounds.x + bounds.width; x += tileWidth) {
+                Rectangle destination = {
+                    x,
+                    bounds.y,
+                    std::min(tileWidth, bounds.x + bounds.width - x),
+                    tileHeight
+                };
+                DrawTexturePro(moss, source, destination, { 0.0f, 0.0f }, 0.0f, WHITE);
+            }
+        } else {
+            DrawRectangleLinesEx(bounds, 2.0f, Color{ 42, 28, 18, 255 });
+            DrawLineEx({ bounds.x, bounds.y }, { bounds.x + bounds.width, bounds.y }, 3.5f, Color{ 46, 204, 113, 255 });
+        }
     }
 }
 

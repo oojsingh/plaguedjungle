@@ -9,7 +9,7 @@ enum class AnchorType {
 
 class AnchorNode : public Entity {
 public:
-    AnchorNode(Vector2 position, AnchorType type = AnchorType::GLOWING_MUSHROOM, float radius = 150.0f);
+    AnchorNode(Vector2 position, AnchorType type = AnchorType::GLOWING_MUSHROOM, float radius = 150.0f, bool fragile = false);
 
     void Update(float dt) override;
     void Draw() override;
@@ -19,6 +19,8 @@ public:
     Vector2 GetCenter() const { return m_position; }
     float GetRadius() const { return m_radius; }
     AnchorType GetAnchorType() const { return m_anchorType; }
+    bool IsFragile() const { return m_fragile; }
+    void SetMovingPath(Vector2 endPosition, float speed);
 
     void SetHighlighted(bool highlighted) { m_isHighlighted = highlighted; }
     bool IsHighlighted() const { return m_isHighlighted; }
@@ -32,4 +34,9 @@ private:
     bool m_isHighlighted;
     float m_cooldownTimer;
     float m_pulseTimer;
+    bool m_fragile;
+    Vector2 m_startPos;
+    Vector2 m_endPos;
+    float m_moveSpeed;
+    bool m_movingToEnd;
 };

@@ -1,34 +1,92 @@
 #include "Hazard.h"
+#include "ResourceManager.h"
 #include <cmath>
 
 Hazard::Hazard(Vector2 position, Vector2 size, HazardType type)
     : Entity(position, size, EntityType::HAZARD),
       m_hazardType(type),
-      m_animTimer(0.0f) {}
+      m_animTimer(0.0f),
+      m_startPos(position),
+      m_endPos(position),
+      m_moveSpeed(0.0f),
+      m_movingToEnd(true),
+      m_dropTriggerY(0.0f),
+      m_dropResetY(0.0f),
+      m_fallSpeed(0.0f),
+      m_climbSpeedThreshold(0.0f),
+      m_dropOnFastClimb(false),
+      m_isDropping(false) {}
+
+Hazard::Hazard(Vector2 startPos, Vector2 endPos, Vector2 size, float speed)
+    : Entity(startPos, size, EntityType::HAZARD),
+      m_hazardType(HazardType::THORN_CLUSTER),
+      m_animTimer(0.0f),
+      m_startPos(startPos),
+      m_endPos(endPos),
+      m_moveSpeed(speed),
+      m_movingToEnd(true),
+      m_dropTriggerY(0.0f),
+      m_dropResetY(0.0f),
+      m_fallSpeed(0.0f),
+      m_climbSpeedThreshold(0.0f),
+      m_dropOnFastClimb(false),
+      m_isDropping(false) {}
+
+void Hazard::SetDropTrigger(float triggerY, float resetY, float fallSpeed, float climbSpeedThreshold) {
+    m_dropOnFastClimb = true;
+    m_dropTriggerY = triggerY;
+    m_dropResetY = resetY;
+    m_fallSpeed = fallSpeed;
+    m_climbSpeedThreshold = climbSpeedThreshold;
+}
+
+void Hazard::TryTriggerDrop(Vector2 playerPosition, Vector2 playerVelocity) {
+    if (m_dropOnFastClimb && !m_isDropping &&
+        std::abs(playerPosition.x - m_position.x) <= 320.0f &&
+        playerPosition.y <= m_dropTriggerY && playerVelocity.y <= -m_climbSpeedThreshold) {
+        m_isDropping = true;
+    }
+}
 
 void Hazard::Update(float dt) {
     m_animTimer += dt;
+    if (m_isDropping) {
+        m_position.y += m_fallSpeed * dt;
+        if (m_position.y >= m_dropResetY) {
+            m_position = m_startPos;
+            m_isDropping = false;
+        }
+        return;
+    }
+    if (m_moveSpeed <= 0.0f) return;
+
+    Vector2 target = m_movingToEnd ? m_endPos : m_startPos;
+    Vector2 delta = Vector2Subtract(target, m_position);
+    float distance = Vector2Length(delta);
+    float step = m_moveSpeed * dt;
+    if (distance <= step) {
+        m_position = target;
+        m_movingToEnd = !m_movingToEnd;
+    } else {
+        m_position = Vector2Add(m_position, Vector2Scale(Vector2Normalize(delta), step));
+    }
 }
 
 void Hazard::Draw() {
     Rectangle bounds = GetBounds();
 
     if (m_hazardType == HazardType::THORN_CLUSTER) {
-        // Jagged bramble base
-        DrawRectangleRec(bounds, Color{ 38, 20, 28, 240 });
-        DrawRectangleLinesEx(bounds, 1.5f, Color{ 80, 25, 45, 255 });
-
-        // Jagged thorns protruding out
-        float spikeWidth = 14.0f;
-        for (float x = bounds.x; x < bounds.x + bounds.width - 4.0f; x += spikeWidth) {
-            float pulse = std::sin(m_animTimer * 5.0f + x * 0.1f) * 2.0f;
-            Vector2 p1 = { x, bounds.y };
-            Vector2 p2 = { x + spikeWidth * 0.5f, bounds.y - 12.0f + pulse };
-            Vector2 p3 = { x + spikeWidth, bounds.y };
-            DrawTriangle(p1, p2, p3, Color{ 192, 57, 43, 255 });
-
-            // Thorn barb tip highlight
-            DrawCircleV(p2, 1.5f, Color{ 255, 120, 100, 255 });
+        Texture2D& thorns = ResourceManager::GetInstance().GetTexture("thorn_cluster");
+        if (thorns.id != 0) {
+            Rectangle source = { 0.0f, 0.0f, static_cast<float>(thorns.width), static_cast<float>(thorns.height) };
+            const float spriteWidth = 52.0f;
+            const float spriteHeight = 46.0f;
+            for (float x = bounds.x; x < bounds.x + bounds.width; x += spriteWidth - 8.0f) {
+                Rectangle destination = { x, bounds.y + bounds.height - spriteHeight, spriteWidth, spriteHeight };
+                DrawTexturePro(thorns, source, destination, { 0.0f, 0.0f }, 0.0f, WHITE);
+            }
+        } else {
+            DrawRectangleRec(bounds, Color{ 38, 20, 28, 240 });
         }
     } else {
         // Spore Vent

@@ -515,6 +515,14 @@ void ResourceManager::InitializeDefaultAssets() {
     LoadTexture("player", playerPath);
     LoadTexture("tileset", tilesetPath);
     LoadTexture("items", itemsPath);
+    LoadTexture("collectable_gem", "assets/textures/collectable_gem.png");
+    LoadTexture("snap_anchor", "assets/textures/snap_anchor.png");
+    LoadTexture("thorn_cluster", "assets/textures/thorn_cluster.png");
+    LoadTexture("moss_platform", "assets/textures/moss_platform.png");
+    for (int i = 0; i < 8; ++i) {
+        LoadTexture("jungle_tree_" + std::to_string(i),
+                    "assets/textures/jungle_tree_" + std::to_string(i) + ".png");
+    }
 
     // Load Stringstar Fields Parallax Background Layers
     LoadTexture("bg_layer_0", "assets/stringstar fields/background_0.png");

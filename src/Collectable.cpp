@@ -26,9 +26,17 @@ void Collectable::Update(float dt) {
 
 void Collectable::Draw() {
     if (!m_active) return;
-    Rectangle bounds = GetBounds();
-    DrawRectangleRec(bounds, Color{ 241, 196, 15, 255 }); // Gold box
-    DrawRectangleLinesEx(bounds, 1.5f, Color{ 180, 140, 10, 255 });
+    Texture2D& gem = ResourceManager::GetInstance().GetTexture("collectable_gem");
+    if (gem.id == 0) return;
+
+    Rectangle source = { 0.0f, 0.0f, static_cast<float>(gem.width), static_cast<float>(gem.height) };
+    Rectangle destination = {
+        m_position.x + (m_size.x - 26.0f) * 0.5f,
+        m_position.y + (m_size.y - 36.0f) * 0.5f,
+        26.0f,
+        36.0f
+    };
+    DrawTexturePro(gem, source, destination, { 0.0f, 0.0f }, 0.0f, WHITE);
 }
 
 void Collectable::DrawDebug() const {

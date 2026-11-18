@@ -35,6 +35,7 @@ public:
 
     bool IsActive() const { return m_active; }
     void Destroy() { m_active = false; }
+    void Activate() { m_active = true; }
 
     // Collision State
     bool IsGrounded() const { return m_isGrounded; }

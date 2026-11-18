@@ -158,6 +158,10 @@ bool Player::TryTailSnap(const std::vector<AnchorNode*>& anchorNodes) {
     m_tailAngularVelocity = rotDir * (speed / m_tailRadius);
     m_tailTimer = 0.0f;
     m_tailMaxDuration = 0.22f; // Snappy whip arc
+    if (m_tailNode->IsFragile()) {
+        m_tailAngularVelocity = 0.0f;
+        m_tailMaxDuration = 0.03f;
+    }
 
     m_state = PlayerMovementState::TAIL_PIVOTING;
 
@@ -304,6 +308,19 @@ void Player::HandleInput(float dt, const std::vector<Vine*>& vines, const std::v
     }
 
     // 4. AIRBORNE / WALL_SLIDING INPUTS
+    const bool jumpPressed = IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W);
+    if (jumpPressed) {
+        m_jumpBufferTimer = m_jumpBufferTime;
+    } else {
+        m_jumpBufferTimer = std::max(0.0f, m_jumpBufferTimer - dt);
+    }
+
+    if (m_isGrounded) {
+        m_coyoteTimer = m_coyoteTime;
+    } else {
+        m_coyoteTimer = std::max(0.0f, m_coyoteTimer - dt);
+    }
+
     float moveInput = 0.0f;
     if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) moveInput += 1.0f;
     if (IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A))  moveInput -= 1.0f;
@@ -320,16 +337,27 @@ void Player::HandleInput(float dt, const std::vector<Vine*>& vines, const std::v
         }
 
         // Wall Jump
-        if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
+        if (jumpPressed) {
             float wallDir = m_isWallLeft ? 1.0f : -1.0f;
             m_velocity.x = wallDir * 380.0f;
             m_velocity.y = m_jumpForce * 0.95f;
             m_facingRight = (wallDir > 0.0f);
             m_state = PlayerMovementState::AIRBORNE;
+            m_jumpBufferTimer = 0.0f;
+            m_coyoteTimer = 0.0f;
             ParticleSystem::GetInstance().EmitBurst(center, 12, Color{ 180, 130, 80, 255 }, 80.0f, 220.0f, 0.3f);
         }
     } else if (m_state == PlayerMovementState::WALL_SLIDING) {
         m_state = PlayerMovementState::AIRBORNE;
+    }
+
+    if (m_jumpBufferTimer > 0.0f && (m_isGrounded || m_coyoteTimer > 0.0f)) {
+        m_velocity.y = m_jumpForce;
+        m_isGrounded = false;
+        m_coyoteTimer = 0.0f;
+        m_jumpBufferTimer = 0.0f;
+        m_state = PlayerMovementState::AIRBORNE;
+        ParticleSystem::GetInstance().EmitBurst(center, 10, Color{ 180, 220, 255, 230 }, 60.0f, 160.0f, 0.25f);
     }
 
     // Horizontal Movement
@@ -352,7 +380,7 @@ void Player::HandleInput(float dt, const std::vector<Vine*>& vines, const std::v
     }
 
     // Grab Vine with Space or Left Mouse Click
-    if (IsKeyDown(KEY_SPACE) || IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+    if ((IsKeyDown(KEY_SPACE) && !jumpPressed) || IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
         TryGrabVine(vines);
     }
 

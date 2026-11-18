@@ -1,15 +1,26 @@
 #include "AnchorNode.h"
 #include "ParticleSystem.h"
+#include "ResourceManager.h"
 #include <cmath>
 #include <algorithm>
 
-AnchorNode::AnchorNode(Vector2 position, AnchorType type, float radius)
+AnchorNode::AnchorNode(Vector2 position, AnchorType type, float radius, bool fragile)
     : Entity(position, { 32.0f, 32.0f }, EntityType::ANCHOR_NODE),
       m_anchorType(type),
       m_radius(radius),
       m_isHighlighted(false),
       m_cooldownTimer(0.0f),
-      m_pulseTimer(0.0f) {}
+      m_pulseTimer(0.0f),
+      m_fragile(fragile),
+      m_startPos(position),
+      m_endPos(position),
+      m_moveSpeed(0.0f),
+      m_movingToEnd(true) {}
+
+void AnchorNode::SetMovingPath(Vector2 endPosition, float speed) {
+    m_endPos = endPosition;
+    m_moveSpeed = speed;
+}
 
 bool AnchorNode::IsInRange(Vector2 playerCenter) const {
     float dx = playerCenter.x - m_position.x;
@@ -20,10 +31,25 @@ bool AnchorNode::IsInRange(Vector2 playerCenter) const {
 void AnchorNode::TriggerSnap() {
     m_cooldownTimer = 0.45f;
     ParticleSystem::GetInstance().EmitBurst(m_position, 14, Color{ 0, 255, 230, 255 }, 80.0f, 250.0f, 0.35f);
+    if (m_fragile) {
+        Destroy();
+    }
 }
 
 void AnchorNode::Update(float dt) {
     m_pulseTimer += dt;
+    if (m_moveSpeed > 0.0f) {
+        Vector2 target = m_movingToEnd ? m_endPos : m_startPos;
+        Vector2 delta = Vector2Subtract(target, m_position);
+        float distance = Vector2Length(delta);
+        float step = m_moveSpeed * dt;
+        if (distance <= step) {
+            m_position = target;
+            m_movingToEnd = !m_movingToEnd;
+        } else {
+            m_position = Vector2Add(m_position, Vector2Scale(Vector2Normalize(delta), step));
+        }
+    }
     if (m_cooldownTimer > 0.0f) {
         m_cooldownTimer -= dt;
     }
@@ -34,25 +60,17 @@ void AnchorNode::Draw() {
     float baseRadius = 14.0f + pulse;
 
     if (m_anchorType == AnchorType::GLOWING_MUSHROOM) {
-        // Glowing Bioluminescent Mushroom cap
-        Color glowColor = m_isHighlighted ? Color{ 0, 255, 220, 255 } : Color{ 52, 152, 219, 220 };
-        Color capColor  = m_isHighlighted ? Color{ 120, 255, 240, 255 } : Color{ 41, 128, 185, 255 };
-
-        // Outer ambient glow ring
-        DrawCircleGradient(static_cast<int>(m_position.x), static_cast<int>(m_position.y),
-                           baseRadius * 2.2f, Color{ 0, 240, 220, 70 }, BLANK);
-
-        // Mushroom stalk
-        DrawRectangle(static_cast<int>(m_position.x - 3), static_cast<int>(m_position.y), 6, 12, Color{ 220, 240, 245, 200 });
-
-        // Cap
-        DrawCircleSector({ m_position.x, m_position.y }, baseRadius, 180.0f, 360.0f, 16, capColor);
-        DrawCircleSectorLines({ m_position.x, m_position.y }, baseRadius, 180.0f, 360.0f, 16, glowColor);
-
-        // Bioluminescent spore spots
-        DrawCircle(static_cast<int>(m_position.x - 5), static_cast<int>(m_position.y - 6), 2.5f, WHITE);
-        DrawCircle(static_cast<int>(m_position.x + 4), static_cast<int>(m_position.y - 7), 2.0f, WHITE);
-        DrawCircle(static_cast<int>(m_position.x),     static_cast<int>(m_position.y - 11), 2.2f, WHITE);
+        Texture2D& anchor = ResourceManager::GetInstance().GetTexture("snap_anchor");
+        if (anchor.id != 0) {
+            DrawCircleGradient(static_cast<int>(m_position.x), static_cast<int>(m_position.y),
+                               baseRadius * 2.2f, Color{ 0, 240, 220, 70 }, BLANK);
+            Rectangle source = { 0.0f, 0.0f, static_cast<float>(anchor.width), static_cast<float>(anchor.height) };
+            Rectangle destination = { m_position.x - 17.0f, m_position.y - 20.0f, 34.0f, 40.0f };
+            Color tint = m_fragile ? Color{ 255, 125, 125, 255 } : WHITE;
+            DrawTexturePro(anchor, source, destination, { 0.0f, 0.0f }, 0.0f, tint);
+        } else {
+            DrawCircle(static_cast<int>(m_position.x), static_cast<int>(m_position.y), baseRadius, SKYBLUE);
+        }
     } else {
         // Sturdy Ancient Branch Knot
         Color knotColor = m_isHighlighted ? Color{ 241, 196, 15, 255 } : Color{ 130, 80, 40, 255 };

@@ -16,6 +16,9 @@ public:
 
     PlatformType GetPlatformType() const { return m_platformType; }
     Vector2 GetPlatformVelocity() const { return m_platformVelocity; }
+    void SetRevealOnApproach();
+    bool CanBeRevealed() const { return m_revealOnApproach && !m_revealed; }
+    void RevealFor(float seconds);
 
 private:
     PlatformType m_platformType;
@@ -26,4 +29,7 @@ private:
     float m_speed;
     bool m_movingToEnd;
     Vector2 m_platformVelocity;
+    bool m_revealOnApproach;
+    bool m_revealed;
+    float m_visibilityTimer;
 };

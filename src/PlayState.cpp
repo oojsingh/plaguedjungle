@@ -1,18 +1,37 @@
 #include "PlayState.h"
+#include "GameStateManager.h"
+#include "MenuState.h"
 #include "ResourceManager.h"
 #include "ParticleSystem.h"
 #include <algorithm>
 #include <string>
 #include <cmath>
 
-PlayState::PlayState()
+PlayState::PlayState(int levelIndex)
     : m_physics(1100.0f, 950.0f),
+      m_levelIndex(levelIndex),
       m_rotWave(520.0f, 10.0f),
       m_debugMode(false),
       m_score(0),
       m_runTimer(0.0f),
       m_screenShake(0.0f),
-      m_reachedSanctuary(false) {}
+      m_reachedSanctuary(false) {
+    const char* levelNames[] = {
+        "High Roost Run",
+        "Bramble Sprint",
+        "Sanctum Gauntlet",
+        "Misdirection Mire",
+        "Panic Pendulum",
+        "Sunk Cost Spire",
+        "Phantom Branch"
+    };
+    if (m_levelIndex >= 0 && m_levelIndex < static_cast<int>(sizeof(levelNames) / sizeof(levelNames[0]))) {
+        m_levelName = levelNames[m_levelIndex];
+    } else {
+        m_levelIndex = 0;
+        m_levelName = levelNames[0];
+    }
+}
 
 void PlayState::Init(GameStateManager* manager) {
     m_manager = manager;
@@ -35,6 +54,7 @@ void PlayState::Cleanup() {
     m_hazards.clear();
     m_collectables.clear();
     m_player = nullptr;
+    m_requiredSnapAnchor = nullptr;
     ParticleSystem::GetInstance().Clear();
 }
 
@@ -49,6 +69,7 @@ void PlayState::BuildCanopyCourse() {
     m_runTimer = 0.0f;
     m_score = 0;
     m_reachedSanctuary = false;
+    m_requiredSnapCompleted = false;
     m_rotWave.Reset(520.0f);
 
     // 1. Create Macaque Player
@@ -87,85 +108,119 @@ void PlayState::BuildCanopyCourse() {
         m_entities.push_back(std::move(c));
     };
 
-    // =========================================================================
-    // CANOPY SNAP: LEVEL 1 - "THE ASCENDING SPORE SURGE"
-    // High-momentum canopy course requiring brachiation, tail snaps & pounces
-    // =========================================================================
+    addPlatform(std::make_unique<Platform>(
+        Vector2{ -400.0f, 490.0f }, Vector2{ 6000.0f, 700.0f }, PlatformType::SOLID));
 
-    // --- ZONE 1: Starting High Roost & First Brachiation Vine ---
-    // Start Roost branch
+    if (m_levelIndex == 5) {
+        m_spawnPos = { 80.0f, 260.0f };
+        m_goalSanctuary = { 1050.0f, -920.0f };
+        addPlatform(std::make_unique<Platform>(Vector2{ 20.0f, 320.0f }, Vector2{ 180.0f, 30.0f }, PlatformType::SOLID));
+        addVine(std::make_unique<Vine>(Vector2{ 260.0f, 210.0f }, 150.0f));
+        addPlatform(std::make_unique<Platform>(Vector2{ 390.0f, 110.0f }, Vector2{ 180.0f, 24.0f }, PlatformType::ONE_WAY));
+        addAnchor(std::make_unique<AnchorNode>(Vector2{ 560.0f, 40.0f }, AnchorType::GLOWING_MUSHROOM, 150.0f));
+        addVine(std::make_unique<Vine>(Vector2{ 700.0f, -40.0f }, 150.0f));
+        addPlatform(std::make_unique<Platform>(Vector2{ 820.0f, -160.0f }, Vector2{ 180.0f, 24.0f }, PlatformType::ONE_WAY));
+        addAnchor(std::make_unique<AnchorNode>(Vector2{ 980.0f, -240.0f }, AnchorType::STURDY_BRANCH_KNOT, 150.0f));
+        addVine(std::make_unique<Vine>(Vector2{ 800.0f, -350.0f }, 150.0f));
+        addPlatform(std::make_unique<Platform>(Vector2{ 570.0f, -470.0f }, Vector2{ 180.0f, 24.0f }, PlatformType::ONE_WAY));
+        addAnchor(std::make_unique<AnchorNode>(Vector2{ 400.0f, -550.0f }, AnchorType::GLOWING_MUSHROOM, 150.0f));
+        addVine(std::make_unique<Vine>(Vector2{ 260.0f, -650.0f }, 150.0f));
+        addPlatform(std::make_unique<Platform>(Vector2{ 390.0f, -770.0f }, Vector2{ 180.0f, 24.0f }, PlatformType::ONE_WAY));
+        addVine(std::make_unique<Vine>(Vector2{ 760.0f, -850.0f }, 130.0f));
+        addPlatform(std::make_unique<Platform>(Vector2{ 980.0f, -960.0f }, Vector2{ 300.0f, 40.0f }, PlatformType::SOLID));
+        auto firstDebris = std::make_unique<Hazard>(Vector2{ 390.0f, -400.0f }, Vector2{ 70.0f, 28.0f });
+        firstDebris->SetDropTrigger(-220.0f, 80.0f, 420.0f, 240.0f);
+        addHazard(std::move(firstDebris));
+        auto secondDebris = std::make_unique<Hazard>(Vector2{ 820.0f, -850.0f }, Vector2{ 70.0f, 28.0f });
+        secondDebris->SetDropTrigger(-640.0f, -300.0f, 460.0f, 250.0f);
+        addHazard(std::move(secondDebris));
+        auto finalSnap = std::make_unique<AnchorNode>(Vector2{ 620.0f, -930.0f }, AnchorType::GLOWING_MUSHROOM, 150.0f);
+        m_requiredSnapAnchor = finalSnap.get();
+        addAnchor(std::move(finalSnap));
+        return;
+    }
+
+    float goalX = 3250.0f;
+    if (m_levelIndex == 1) {
+        goalX = 2800.0f;
+    } else if (m_levelIndex == 2) {
+        goalX = 3500.0f;
+        addHazard(std::make_unique<Hazard>(Vector2{ 1150.0f, 390.0f }, Vector2{ 210.0f, 40.0f }, HazardType::THORN_CLUSTER));
+        addHazard(std::make_unique<Hazard>(Vector2{ 2000.0f, 20.0f }, Vector2{ 220.0f, 40.0f }, HazardType::THORN_CLUSTER));
+        addBarrier(std::make_unique<BreakableBarrier>(Vector2{ 2280.0f, 90.0f }, Vector2{ 30.0f, 170.0f }, BarrierType::PREDATORY_FLORA));
+    }
+
+    // Shared canopy route with level-specific pace changes
     addPlatform(std::make_unique<Platform>(Vector2{ 20.0f, 320.0f }, Vector2{ 180.0f, 30.0f }, PlatformType::SOLID));
-    // High overhead canopy branch
     addPlatform(std::make_unique<Platform>(Vector2{ 0.0f, 60.0f }, Vector2{ 500.0f, 35.0f }, PlatformType::SOLID));
-
-    // First Vine (Teaches grab & pump momentum)
     addVine(std::make_unique<Vine>(Vector2{ 340.0f, 75.0f }, 155.0f));
-
-    // --- ZONE 2: Double Vine Slingshot & Launch Sweet-Spot ---
     addPlatform(std::make_unique<Platform>(Vector2{ 480.0f, 50.0f }, Vector2{ 400.0f, 30.0f }, PlatformType::SOLID));
     addVine(std::make_unique<Vine>(Vector2{ 620.0f, 65.0f }, 160.0f));
-
-    // Spore gems along optimal swing trajectory
     addCollectable(std::make_unique<Collectable>(Vector2{ 420.0f, 170.0f }, 100));
     addCollectable(std::make_unique<Collectable>(Vector2{ 730.0f, 130.0f }, 150));
-
-    // Floor hazard spikes / thorn clusters under the vines
     addHazard(std::make_unique<Hazard>(Vector2{ 280.0f, 460.0f }, Vector2{ 380.0f, 30.0f }, HazardType::THORN_CLUSTER));
-
-    // --- ZONE 3: The First Tail Pivot Corner (The Glowing Mushroom Chasm) ---
-    // Overhead jagged barrier forces player downwards then sharp pivot upwards
     addHazard(std::make_unique<Hazard>(Vector2{ 830.0f, 80.0f }, Vector2{ 60.0f, 180.0f }, HazardType::THORN_CLUSTER));
-
-    // Glowing Anchor Node (Snaps tail and whips macaque around the thorn obstacle!)
     addAnchor(std::make_unique<AnchorNode>(Vector2{ 960.0f, 210.0f }, AnchorType::GLOWING_MUSHROOM, 160.0f));
     addCollectable(std::make_unique<Collectable>(Vector2{ 960.0f, 100.0f }, 200));
-
-    // --- ZONE 4: Vertical Redwood Bark Trunk & Wall Cling / Kick ---
-    // Giant vertical trunk that player clings to and slides down
     addPlatform(std::make_unique<Platform>(Vector2{ 1160.0f, -40.0f }, Vector2{ 70.0f, 440.0f }, PlatformType::TREE_BARK));
-
-    // Vine immediately past the wall kick
     addVine(std::make_unique<Vine>(Vector2{ 1380.0f, 60.0f }, 165.0f));
     addCollectable(std::make_unique<Collectable>(Vector2{ 1300.0f, 180.0f }, 150));
-
-    // --- ZONE 5: The Brittle Barrier Smash (Pounce Speed Test) ---
-    // A narrow wooden canopy tunnel blocked by brittle barricades
     addPlatform(std::make_unique<Platform>(Vector2{ 1520.0f, 120.0f }, Vector2{ 280.0f, 25.0f }, PlatformType::SOLID));
     addPlatform(std::make_unique<Platform>(Vector2{ 1520.0f, 280.0f }, Vector2{ 280.0f, 25.0f }, PlatformType::SOLID));
-
-    // Two Brittle Barriers blocking the tunnel! Requires cashing in Pounce Meter to smash through!
     addBarrier(std::make_unique<BreakableBarrier>(Vector2{ 1620.0f, 145.0f }, Vector2{ 24.0f, 135.0f }, BarrierType::BRITTLE_WOOD));
     addBarrier(std::make_unique<BreakableBarrier>(Vector2{ 1740.0f, 145.0f }, Vector2{ 24.0f, 135.0f }, BarrierType::BRITTLE_WOOD));
     addCollectable(std::make_unique<Collectable>(Vector2{ 1680.0f, 200.0f }, 250));
-
-    // --- ZONE 6: The Thorn Maze & Dual Tail-Snap S-Curve ---
-    // Ceilings and floor thorns form a wicked high-speed chicane
     addHazard(std::make_unique<Hazard>(Vector2{ 1860.0f, 400.0f }, Vector2{ 500.0f, 40.0f }, HazardType::THORN_CLUSTER));
     addHazard(std::make_unique<Hazard>(Vector2{ 1980.0f, 20.0f }, Vector2{ 350.0f, 40.0f }, HazardType::THORN_CLUSTER));
-
-    // First S-Turn Anchor Node (Whip 1)
     addAnchor(std::make_unique<AnchorNode>(Vector2{ 1980.0f, 260.0f }, AnchorType::GLOWING_MUSHROOM, 150.0f));
-    // Second S-Turn Anchor Node (Whip 2 - Sturdy Branch Knot)
     addAnchor(std::make_unique<AnchorNode>(Vector2{ 2220.0f, 140.0f }, AnchorType::STURDY_BRANCH_KNOT, 150.0f));
-
     addCollectable(std::make_unique<Collectable>(Vector2{ 2100.0f, 180.0f }, 250));
-
-    // --- ZONE 7: Predatory Flora Gate & Final High Canopy Vine ---
-    // Predatory Flora barrier (requires high speed smash)
     addBarrier(std::make_unique<BreakableBarrier>(Vector2{ 2440.0f, 100.0f }, Vector2{ 30.0f, 150.0f }, BarrierType::PREDATORY_FLORA));
-
-    // High Canopy Slingshot Vine
     addVine(std::make_unique<Vine>(Vector2{ 2680.0f, 40.0f }, 175.0f));
-
-    // Extra Anchor Node for extreme momentum recovery
     addAnchor(std::make_unique<AnchorNode>(Vector2{ 2940.0f, 130.0f }, AnchorType::GLOWING_MUSHROOM, 160.0f));
 
-    // --- ZONE 8: Ancient High-Canopy Sanctuary (Goal Haven) ---
-    m_goalSanctuary = { 3250.0f, 160.0f };
-    // Massive sacred Banyan canopy sanctuary platform safe from the spore rot
-    addPlatform(std::make_unique<Platform>(Vector2{ 3180.0f, 210.0f }, Vector2{ 360.0f, 60.0f }, PlatformType::SOLID));
-    addPlatform(std::make_unique<Platform>(Vector2{ 3280.0f, 120.0f }, Vector2{ 160.0f, 20.0f }, PlatformType::ONE_WAY));
-    addCollectable(std::make_unique<Collectable>(Vector2{ 3360.0f, 70.0f }, 500));
+    if (m_levelIndex == 1) {
+        addHazard(std::make_unique<Hazard>(Vector2{ 2500.0f, 420.0f }, Vector2{ 220.0f, 26.0f }, HazardType::THORN_CLUSTER));
+        addCollectable(std::make_unique<Collectable>(Vector2{ 2580.0f, 80.0f }, 220));
+    } else if (m_levelIndex == 2) {
+        addHazard(std::make_unique<Hazard>(Vector2{ 2550.0f, 310.0f }, Vector2{ 260.0f, 30.0f }, HazardType::THORN_CLUSTER));
+        addHazard(std::make_unique<Hazard>(Vector2{ 3040.0f, 100.0f }, Vector2{ 110.0f, 160.0f }, HazardType::THORN_CLUSTER));
+        addCollectable(std::make_unique<Collectable>(Vector2{ 3180.0f, 100.0f }, 350));
+    } else if (m_levelIndex == 3) {
+        addAnchor(std::make_unique<AnchorNode>(Vector2{ 500.0f, 210.0f }, AnchorType::GLOWING_MUSHROOM, 160.0f, true));
+        addAnchor(std::make_unique<AnchorNode>(Vector2{ 1280.0f, 190.0f }, AnchorType::GLOWING_MUSHROOM, 155.0f, true));
+        addAnchor(std::make_unique<AnchorNode>(Vector2{ 2160.0f, 170.0f }, AnchorType::STURDY_BRANCH_KNOT, 155.0f, true));
+        addHazard(std::make_unique<Hazard>(Vector2{ 2700.0f, 430.0f }, Vector2{ 280.0f, 26.0f }, HazardType::THORN_CLUSTER));
+    } else if (m_levelIndex == 4) {
+        const Vector2 logStarts[] = { { 700.0f, 230.0f }, { 1350.0f, 260.0f }, { 2100.0f, 220.0f } };
+        const Vector2 logEnds[] = { { 900.0f, 230.0f }, { 1650.0f, 260.0f }, { 2440.0f, 220.0f } };
+        const Vector2 logSizes[] = { { 110.0f, 36.0f }, { 120.0f, 36.0f }, { 130.0f, 38.0f } };
+        const float logSpeeds[] = { 210.0f, 240.0f, 260.0f };
+        for (int i = 0; i < 3; ++i) {
+            addHazard(std::make_unique<Hazard>(logStarts[i], logEnds[i], logSizes[i], logSpeeds[i]));
+            auto pivot = std::make_unique<AnchorNode>(
+                Vector2{ logStarts[i].x + logSizes[i].x * 0.5f, logStarts[i].y + logSizes[i].y * 0.5f },
+                AnchorType::GLOWING_MUSHROOM, 150.0f);
+            pivot->SetMovingPath({ logEnds[i].x + logSizes[i].x * 0.5f, logEnds[i].y + logSizes[i].y * 0.5f }, logSpeeds[i]);
+            addAnchor(std::move(pivot));
+        }
+    } else if (m_levelIndex == 6) {
+        auto addPhantomPlatform = [&addPlatform](Vector2 position, Vector2 size) {
+            auto platform = std::make_unique<Platform>(position, size, PlatformType::ONE_WAY);
+            platform->SetRevealOnApproach();
+            addPlatform(std::move(platform));
+        };
+        addPhantomPlatform({ 2780.0f, 290.0f }, { 130.0f, 20.0f });
+        addPhantomPlatform({ 2960.0f, 220.0f }, { 130.0f, 20.0f });
+        addPhantomPlatform({ 3100.0f, 280.0f }, { 130.0f, 20.0f });
+        addHazard(std::make_unique<Hazard>(Vector2{ 2920.0f, 360.0f }, Vector2{ 320.0f, 24.0f }, HazardType::THORN_CLUSTER));
+        addCollectable(std::make_unique<Collectable>(Vector2{ 3010.0f, 150.0f }, 350));
+    }
+
+    m_goalSanctuary = { goalX, 160.0f };
+    addPlatform(std::make_unique<Platform>(Vector2{ goalX - 70.0f, 210.0f }, Vector2{ 360.0f, 60.0f }, PlatformType::SOLID));
+    addPlatform(std::make_unique<Platform>(Vector2{ goalX + 20.0f, 120.0f }, Vector2{ 160.0f, 20.0f }, PlatformType::ONE_WAY));
+    addCollectable(std::make_unique<Collectable>(Vector2{ goalX + 180.0f, 70.0f }, 500));
 }
 
 void PlayState::CheckBarrierSmash() {
@@ -200,6 +255,10 @@ void PlayState::CheckHazards() {
     // 1. Thorn Hazards
     for (auto* h : m_hazards) {
         if (!h || !h->IsActive()) continue;
+        if (m_levelIndex == 4 && h->IsMoving() &&
+            m_player->GetMovementState() == PlayerMovementState::TAIL_PIVOTING) {
+            continue;
+        }
 
         if (PhysicsEngine::CheckAABB(playerBounds, h->GetBounds())) {
             // Hit thorns: burst & reset
@@ -208,6 +267,7 @@ void PlayState::CheckHazards() {
             AddScreenShake(12.0f);
             m_player->Reset(m_spawnPos);
             m_rotWave.Reset(520.0f);
+            m_requiredSnapCompleted = false;
             return;
         }
     }
@@ -219,6 +279,7 @@ void PlayState::CheckHazards() {
         AddScreenShake(14.0f);
         m_player->Reset(m_spawnPos);
         m_rotWave.Reset(520.0f);
+        m_requiredSnapCompleted = false;
         return;
     }
 
@@ -226,6 +287,7 @@ void PlayState::CheckHazards() {
     if (m_player->GetPosition().y > 800.0f) {
         m_player->Reset(m_spawnPos);
         m_rotWave.Reset(520.0f);
+        m_requiredSnapCompleted = false;
     }
 }
 
@@ -239,12 +301,27 @@ void PlayState::Update(float dt) {
         m_debugMode = !m_debugMode;
     }
 
-    // Quick Restart
+    // Quick Restart / Return to menu
     if (IsKeyPressed(KEY_R)) {
         if (m_player) {
             m_player->Reset(m_spawnPos);
             m_rotWave.Reset(520.0f);
             m_reachedSanctuary = false;
+            m_requiredSnapCompleted = false;
+        }
+    }
+    Rectangle menuButton = {
+        static_cast<float>(GetScreenWidth() - 150),
+        14.0f,
+        136.0f,
+        36.0f
+    };
+    bool clickedMenuButton = IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
+                             CheckCollisionPointRec(GetMousePosition(), menuButton);
+    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_M) || clickedMenuButton) {
+        if (m_manager) {
+            m_manager->ChangeState(std::make_unique<MenuState>());
+            return;
         }
     }
 
@@ -252,6 +329,20 @@ void PlayState::Update(float dt) {
     for (auto* vine : m_vines) {
         if (vine && vine->IsActive()) {
             vine->Update(dt);
+        }
+    }
+
+    if (m_levelIndex == 6 && m_player) {
+        float approachX = m_player->GetPosition().x + 260.0f;
+        for (auto* platform : m_platforms) {
+            if (platform && platform->CanBeRevealed() && approachX >= platform->GetPosition().x) {
+                platform->RevealFor(2.0f);
+            }
+        }
+    }
+    for (auto* platform : m_platforms) {
+        if (platform && platform->IsActive()) {
+            platform->Update(dt);
         }
     }
 
@@ -272,6 +363,9 @@ void PlayState::Update(float dt) {
     // 4. Update Hazards
     for (auto* h : m_hazards) {
         if (h && h->IsActive()) {
+            if (m_levelIndex == 5 && m_player) {
+                h->TryTriggerDrop(m_player->GetPosition(), m_player->GetVelocity());
+            }
             h->Update(dt);
         }
     }
@@ -279,9 +373,16 @@ void PlayState::Update(float dt) {
     // 5. Update Player with Brachiation & Tail Snap
     if (m_player && m_player->IsActive()) {
         m_player->HandleInput(dt, m_vines, m_anchorNodes);
+        if (m_requiredSnapAnchor && !m_requiredSnapAnchor->CanSnap()) {
+            m_requiredSnapCompleted = true;
+        }
 
         // When free falling / jumping / sliding, physics engine handles kinematic collision
         PlayerMovementState state = m_player->GetMovementState();
+        if (m_levelIndex == 3 && state == PlayerMovementState::WALL_SLIDING &&
+            m_player->GetPosition().x >= 1120.0f && m_player->GetPosition().x <= 1160.0f) {
+            m_player->SetVelocityY(500.0f);
+        }
         if (state == PlayerMovementState::AIRBORNE || state == PlayerMovementState::WALL_SLIDING) {
             m_physics.ApplyGravity(m_player, dt);
             m_physics.UpdateEntityPhysics(m_player, m_platforms, dt);
@@ -319,7 +420,8 @@ void PlayState::Update(float dt) {
 
     // 9. Check Sanctuary Goal Reached
     if (m_player && !m_reachedSanctuary) {
-        if (m_player->GetPosition().x >= m_goalSanctuary.x && m_player->GetPosition().y <= m_goalSanctuary.y + 60.0f) {
+        if (m_player->GetPosition().x >= m_goalSanctuary.x && m_player->GetPosition().y <= m_goalSanctuary.y + 60.0f &&
+            (m_levelIndex != 5 || m_requiredSnapCompleted)) {
             m_reachedSanctuary = true;
             ParticleSystem::GetInstance().EmitBurst(m_goalSanctuary, 60, GOLD, 150.0f, 450.0f, 0.8f);
             AddScreenShake(10.0f);
@@ -390,12 +492,97 @@ void PlayState::DrawParallaxLayer(const Texture2D& tex, float parallaxRate, floa
     }
 }
 
+void PlayState::DrawJungleScenery() const {
+    constexpr float groundY = 490.0f;
+    constexpr float backTreeSpacing = 590.0f;
+    constexpr float frontTreeSpacing = 430.0f;
+    const float viewLeft = m_camera.target.x - m_camera.offset.x - 160.0f;
+    const float viewRight = viewLeft + GetScreenWidth() + 320.0f;
+    const int firstBackTree = static_cast<int>(std::floor(viewLeft / backTreeSpacing));
+    const int lastBackTree = static_cast<int>(std::ceil(viewRight / backTreeSpacing));
+
+    auto drawTree = [](int treeIndex, float centerX, float baseY, float height, Color tint) {
+        const int spriteIndex = ((treeIndex % 8) + 8) % 8;
+        Texture2D& tree = ResourceManager::GetInstance().GetTexture(
+            "jungle_tree_" + std::to_string(spriteIndex));
+        if (tree.id == 0 || tree.height <= 0) return;
+
+        const float width = height * static_cast<float>(tree.width) / static_cast<float>(tree.height);
+        Rectangle source = { 0.0f, 0.0f, static_cast<float>(tree.width), static_cast<float>(tree.height) };
+        Rectangle destination = { centerX - width * 0.5f, baseY - height, width, height };
+        DrawTexturePro(tree, source, destination, { 0.0f, 0.0f }, 0.0f, tint);
+    };
+
+    // Distant tree silhouettes add depth while keeping the existing parallax untouched.
+    for (int tree = firstBackTree; tree <= lastBackTree; ++tree) {
+        const float x = tree * backTreeSpacing + 240.0f;
+        drawTree(tree + 3, x, groundY + 18.0f, 410.0f, Color{ 125, 155, 125, 190 });
+    }
+
+    const int firstFrontTree = static_cast<int>(std::floor(viewLeft / frontTreeSpacing));
+    const int lastFrontTree = static_cast<int>(std::ceil(viewRight / frontTreeSpacing));
+    for (int tree = firstFrontTree; tree <= lastFrontTree; ++tree) {
+        const float x = tree * frontTreeSpacing + 205.0f;
+        drawTree(tree, x, groundY + 25.0f, 500.0f, WHITE);
+    }
+
+    const float screenLeft = m_camera.target.x - m_camera.offset.x - 100.0f;
+    const float screenRight = screenLeft + GetScreenWidth() + 200.0f;
+    const float canopyY = m_camera.target.y - m_camera.offset.y + 8.0f;
+    const int firstCanopy = static_cast<int>(std::floor(screenLeft / 55.0f));
+    const int lastCanopy = static_cast<int>(std::ceil(screenRight / 55.0f));
+    for (int leaf = firstCanopy; leaf <= lastCanopy; ++leaf) {
+        const float x = leaf * 55.0f;
+        const float radiusX = 44.0f + static_cast<float>((leaf * 17) & 23);
+        const float radiusY = 38.0f + static_cast<float>((leaf * 11) & 19);
+        DrawEllipse(static_cast<int>(x), static_cast<int>(canopyY + 13.0f),
+                    radiusX, radiusY, Color{ 12, 57, 34, 250 });
+        DrawEllipse(static_cast<int>(x - 19.0f), static_cast<int>(canopyY + 4.0f),
+                    radiusX * 0.64f, radiusY * 0.72f, Color{ 24, 91, 43, 255 });
+        DrawEllipse(static_cast<int>(x + 17.0f), static_cast<int>(canopyY + 1.0f),
+                    radiusX * 0.53f, radiusY * 0.63f, Color{ 39, 111, 49, 245 });
+    }
+
+    for (int vine = firstCanopy; vine <= lastCanopy; vine += 3) {
+        const float x = vine * 55.0f + 20.0f;
+        const float length = 50.0f + static_cast<float>((vine * 29) & 95);
+        Vector2 previous = { x, canopyY + 17.0f };
+        for (int segment = 1; segment <= 5; ++segment) {
+            Vector2 next = {
+                x + std::sin(segment * 0.72f + vine) * 7.0f,
+                canopyY + 17.0f + length * segment / 5.0f
+            };
+            DrawLineEx(previous, next, 3.0f, Color{ 43, 111, 49, 245 });
+            if (segment == 2 || segment == 4) {
+                DrawEllipse(static_cast<int>(next.x + 6.0f), static_cast<int>(next.y),
+                            8.0f, 4.0f, Color{ 81, 151, 59, 255 });
+            }
+            previous = next;
+        }
+    }
+
+    const int firstClump = static_cast<int>(std::floor((m_camera.target.x - 1000.0f) / 170.0f));
+    const int lastClump = static_cast<int>(std::ceil((m_camera.target.x + 1000.0f) / 170.0f));
+    for (int clump = firstClump; clump <= lastClump; ++clump) {
+        const float x = clump * 170.0f;
+        DrawEllipse(static_cast<int>(x), static_cast<int>(groundY), 38.0f, 25.0f,
+                    Color{ 25, 82, 43, 220 });
+        DrawEllipse(static_cast<int>(x + 25.0f), static_cast<int>(groundY + 7.0f), 32.0f, 21.0f,
+                    Color{ 35, 112, 50, 220 });
+        DrawEllipse(static_cast<int>(x - 23.0f), static_cast<int>(groundY + 10.0f), 28.0f, 19.0f,
+                    Color{ 47, 126, 54, 220 });
+    }
+}
+
 void PlayState::Draw() {
     // 1. Draw Canopy Parallax Backdrops
     DrawBackground();
 
     // 2. Draw World Scene
     BeginMode2D(m_camera);
+
+    // Jungle vegetation is part of the level scene; the existing parallax remains unchanged.
+    DrawJungleScenery();
 
     // Platforms & Ancient Redwood Trunks
     for (auto* plat : m_platforms) {
@@ -470,6 +657,14 @@ void PlayState::Draw() {
 
     EndMode2D();
 
+    if (m_levelIndex == 6) {
+        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Color{ 170, 185, 205, 30 });
+        DrawCircleGradient(GetScreenWidth() / 4, GetScreenHeight() / 2, 190.0f,
+                           Color{ 185, 200, 220, 32 }, BLANK);
+        DrawCircleGradient(GetScreenWidth() * 3 / 4, GetScreenHeight() / 3, 240.0f,
+                           Color{ 185, 200, 220, 24 }, BLANK);
+    }
+
     // 3. Draw Canopy Snap Kinetic HUD
     DrawHUD();
 }
@@ -478,11 +673,12 @@ void PlayState::DrawHUD() const {
     if (!m_player) return;
 
     // --- TOP-LEFT STATUS & GAUGES ---
-    DrawRectangle(14, 14, 380, 105, Color{ 14, 18, 26, 235 });
-    DrawRectangleLines(14, 14, 380, 105, Color{ 45, 60, 85, 255 });
+    DrawRectangle(14, 14, 380, 124, Color{ 14, 18, 26, 235 });
+    DrawRectangleLines(14, 14, 380, 124, Color{ 45, 60, 85, 255 });
 
     // Title & Logo
     DrawText("CANOPY SNAP", 26, 22, 16, Color{ 0, 255, 220, 255 });
+    DrawText(TextFormat("LEVEL: %s", m_levelName.c_str()), 26, 42, 10, Color{ 170, 210, 255, 255 });
 
     // Kinetic State Pill
     PlayerMovementState state = m_player->GetMovementState();
@@ -508,32 +704,48 @@ void PlayState::DrawHUD() const {
 
     // Speedometer
     float currentSpeed = m_player->GetSpeed();
-    DrawText(TextFormat("VELOCITY: %.0f px/s", currentSpeed), 26, 46, 12, (currentSpeed > 450.0f) ? Color{ 255, 215, 0, 255 } : LIGHTGRAY);
+    DrawText(TextFormat("VELOCITY: %.0f px/s", currentSpeed), 26, 56, 12, (currentSpeed > 450.0f) ? Color{ 255, 215, 0, 255 } : LIGHTGRAY);
 
     // Speed bar
     float speedRatio = std::clamp(currentSpeed / 900.0f, 0.0f, 1.0f);
-    DrawRectangle(150, 48, 170, 8, Color{ 30, 35, 48, 255 });
-    DrawRectangle(150, 48, static_cast<int>(170.0f * speedRatio), 8, (currentSpeed > 500.0f) ? Color{ 255, 140, 0, 255 } : Color{ 52, 152, 219, 255 });
+    DrawRectangle(150, 58, 170, 8, Color{ 30, 35, 48, 255 });
+    DrawRectangle(150, 58, static_cast<int>(170.0f * speedRatio), 8, (currentSpeed > 500.0f) ? Color{ 255, 140, 0, 255 } : Color{ 52, 152, 219, 255 });
 
     // POUNCE METER GAUGE
     float pounceMeter = m_player->GetPounceMeter();
-    DrawText("POUNCE METER:", 26, 68, 12, (pounceMeter >= 25.0f) ? Color{ 255, 165, 0, 255 } : GRAY);
+    DrawText("POUNCE METER:", 26, 78, 12, (pounceMeter >= 25.0f) ? Color{ 255, 165, 0, 255 } : GRAY);
 
-    DrawRectangle(150, 68, 170, 14, Color{ 30, 35, 48, 255 });
+    DrawRectangle(150, 78, 170, 14, Color{ 30, 35, 48, 255 });
     Color pounceColor = (pounceMeter >= 25.0f) ? Color{ 255, 140, 0, 255 } : Color{ 160, 100, 30, 200 };
-    DrawRectangle(150, 68, static_cast<int>(170.0f * (pounceMeter / 100.0f)), 14, pounceColor);
-    DrawRectangleLines(150, 68, 170, 14, Color{ 70, 80, 105, 255 });
+    DrawRectangle(150, 78, static_cast<int>(170.0f * (pounceMeter / 100.0f)), 14, pounceColor);
+    DrawRectangleLines(150, 78, 170, 14, Color{ 70, 80, 105, 255 });
 
     if (pounceMeter >= 25.0f) {
-        DrawText("READY [Q / F / Shift]", 162, 70, 10, WHITE);
+        DrawText("READY [Q / F / Shift]", 162, 80, 10, WHITE);
     }
 
     // Run Timer & Score
-    DrawText(TextFormat("TIME: %.1fs  |  SCORE: %d", m_runTimer, m_score), 26, 96, 11, GOLD);
+    DrawText(TextFormat("TIME: %.1fs  |  SCORE: %d", m_runTimer, m_score), 26, 106, 11, GOLD);
+
+    // --- TOP-RIGHT EXIT TO MENU BUTTON ---
+    Rectangle menuButton = {
+        static_cast<float>(GetScreenWidth() - 150),
+        14.0f,
+        136.0f,
+        36.0f
+    };
+    bool hovered = CheckCollisionPointRec(GetMousePosition(), menuButton);
+    Color menuButtonColor = hovered ? Color{ 0, 130, 120, 255 } : Color{ 18, 38, 48, 245 };
+    DrawRectangleRec(menuButton, menuButtonColor);
+    DrawRectangleLinesEx(menuButton, 2.0f, Color{ 0, 255, 220, 255 });
+    DrawText("MAIN MENU", static_cast<int>(menuButton.x + 23), static_cast<int>(menuButton.y + 11), 12, WHITE);
+    if (m_levelIndex == 5 && !m_requiredSnapCompleted) {
+        DrawText("OBJECTIVE: FIND THE HIDDEN TAIL-SNAP", GetScreenWidth() - 355, 60, 11, GOLD);
+    }
 
     // --- BOTTOM CONTROLS QUICK BAR ---
-    DrawRectangle(14, GetScreenHeight() - 38, 540, 26, Color{ 14, 18, 26, 215 });
-    DrawText("[Space/LMB] Grab Vine & Brachiate  |  [E/RMB/Shift] Tail Snap  |  [Q/F] Pounce Smash  |  [R] Reset",
+    DrawRectangle(14, GetScreenHeight() - 38, 850, 26, Color{ 14, 18, 26, 215 });
+    DrawText("[Space/Up/W] Jump  |  [Hold Space/LMB] Swing  |  [E/RMB/Shift] Tail Snap  |  [Q/F] Pounce  |  [R] Reset  |  [Esc/M] Menu",
              22, GetScreenHeight() - 31, 10, Color{ 180, 200, 220, 255 });
 
     // --- WARNING PROXIMITY TO TOXIC SPORE SEA ---
@@ -554,6 +766,6 @@ void PlayState::DrawHUD() const {
         DrawText("CANOPY SANCTUARY REACHED!", GetScreenWidth() / 2 - 180, GetScreenHeight() / 2 - 65, 20, GOLD);
         DrawText("You escaped the bio-engineered spore rot!", GetScreenWidth() / 2 - 165, GetScreenHeight() / 2 - 35, 13, RAYWHITE);
         DrawText(TextFormat("Run Time: %.2f seconds   Score: %d", m_runTimer, m_score), GetScreenWidth() / 2 - 140, GetScreenHeight() / 2 - 5, 13, Color{ 0, 255, 220, 255 });
-        DrawText("Press [R] to race through the canopy again!", GetScreenWidth() / 2 - 150, GetScreenHeight() / 2 + 35, 12, Color{ 255, 215, 0, 255 });
+        DrawText("Press [R] to race through the canopy again!   [M] for menu", GetScreenWidth() / 2 - 180, GetScreenHeight() / 2 + 35, 12, Color{ 255, 215, 0, 255 });
     }
 }
